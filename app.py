@@ -1,265 +1,277 @@
-"""ReVora HubOS-Sat | Es'hailSat-context GEO Communications Intelligence DEMO.
-All telemetry is synthetic, fictional and not calibrated to Es'hailSat spacecraft.
-"""
-import math
 import time
-from collections import deque
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
 
-st.set_page_config(page_title="ReVora | HubOS-Sat GEO Intelligence", page_icon="🛰️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title='ReVora | HubOS-Sat Sovereign Mission Intelligence', page_icon='🛰️', layout='wide', initial_sidebar_state='expanded')
 
-# Explicitly style common Streamlit components: no light panels with light text.
 st.markdown('''<style>
-:root {color-scheme:dark}
-html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
-[data-testid="stSidebar"], [data-testid="stBottom"], [data-testid="stMain"],
-[data-testid="stMainBlockContainer"] {background:#071321 !important;color:#e8f3ff !important;}
-.stApp, .stApp * {font-family:Inter, system-ui, -apple-system, "Segoe UI", sans-serif;}
-.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp p,.stApp label,
-.stApp span,.stApp small, .stApp li {color:#e8f3ff;}
-[data-testid="stWidgetLabel"] p, [data-testid="stMetricLabel"] *,
-[data-testid="stMetricLabel"], [data-testid="stMetricValue"] *,
-[data-testid="stMetricValue"], [data-testid="stMetricDelta"] *,
-[data-testid="stCaptionContainer"] * {color:#ecf6ff !important;opacity:1 !important;}
-[data-testid="stMetric"] {background:#10263b !important;border:1px solid #355775 !important;border-radius:12px;padding:13px 14px;}
-[data-testid="stMetricLabel"] {font-weight:750 !important;}
-[data-testid="stMarkdownContainer"] {color:#e8f3ff !important;}
-[data-baseweb="select"] > div, [data-baseweb="popover"] > div,
-[data-baseweb="menu"], [data-baseweb="input"] > div,
-[data-baseweb="slider"] {background:#122a43 !important;color:#fff !important;}
-[data-baseweb="select"] *, [data-baseweb="popover"] *, [data-baseweb="menu"] * {color:#fff !important;}
-[data-testid="stAlert"] {background:#183148 !important;border-color:#40627f !important;}
-[data-testid="stAlert"] * {color:#f6fbff !important;}
-.stButton button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] {
- background:#173a56 !important;color:#fff !important;border:1px solid #487b96 !important;font-weight:750 !important;
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"],
+[data-testid="stSidebar"], [data-testid="stSidebarContent"] {background-color:#071421 !important; color:#F2F7FF !important;}
+[data-testid="stSidebar"] {background:#0C1D30 !important; border-right:1px solid #24445F !important;}
+* {scrollbar-color:#365877 #071421;}
+.stApp p, .stApp label, .stApp li, .stApp span, .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+[data-testid="stWidgetLabel"] *, [data-testid="stMarkdownContainer"] *, [data-testid="stCaptionContainer"] *,
+[data-testid="stMetricLabel"] *, [data-testid="stMetricValue"] *, [data-testid="stMetricDelta"] * {
+ color:#EAF3FF !important; opacity:1 !important;
 }
-.stButton button:hover {background:#235573 !important;}
-[data-testid="stTabs"] button {color:#eff8ff !important;}
-hr {border-color:#304a61 !important;}
-.hero {padding:22px 26px;border:1px solid #366987;border-radius:16px;background:linear-gradient(115deg,#123452,#0a2034 62%,#113b43);margin-bottom:14px;}
-.hero .eyebrow {font-size:11px;font-weight:800;letter-spacing:2px;color:#64e1d2 !important;}
-.hero .h {font-size:30px;line-height:1.2;font-weight:850;color:#fff !important;margin:7px 0;}
-.hero .sub {font-size:14px;color:#c8e4ef !important;}
-.notice {background:#253320;border:1px solid #8b914c;border-radius:8px;padding:9px 13px;color:#fff4c9 !important;font-size:12px;font-weight:700;margin:6px 0 16px;}
-.panel {border:1px solid #345670;background:#10263b;border-radius:13px;padding:17px 18px;margin:5px 0 12px;}
-.panel h3 {margin:0 0 9px 0;color:#f5fbff !important;font-size:17px;}
-.panel p {font-size:13px;color:#d8e8f5 !important;line-height:1.65;margin:0;}
-.chip {display:inline-block;border:1px solid #4c8294;background:#113c4b;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:800;color:#d3faf2 !important;margin-right:6px;}
-.chip.alert {background:#512e36;border-color:#bd6675;color:#ffe2e5 !important;}
-.chip.warn {background:#554126;border-color:#b78a3e;color:#fff0cc !important;}
-.console {background:#091a2a;border:1px solid #38566d;border-radius:10px;padding:12px 15px;font-family:ui-monospace, Consolas,monospace;font-size:12px;min-height:160px;}
-.console .line {font-family:ui-monospace,Consolas,monospace;color:#d4e9f7 !important;padding:4px 0;border-bottom:1px solid #1d3449;}
-.console .event {color:#6ce2cf !important;font-weight:800;}
-.console .warn {color:#ffd083 !important;}
-.console .error {color:#ff989f !important;}
-.small {font-size:12px;color:#bcd3e7 !important;}
+[data-testid="stCaptionContainer"] * {color:#B6CDE2 !important;}
+[data-testid="stMetric"] {background:#10283D !important; border:1px solid #315775 !important; border-radius:13px; padding:15px !important;}
+[data-testid="stMetricLabel"] *, [data-testid="stMetricLabel"] {color:#C9E1F5 !important; font-weight:700 !important; font-size:0.9rem !important;}
+[data-testid="stMetricValue"] *,[data-testid="stMetricValue"] {color:white !important; font-weight:800 !important;}
+[data-baseweb="select"]>div, [data-baseweb="input"]>div, [data-baseweb="popover"] div,
+[data-testid="stNumberInput"] input, [data-testid="stTextInput"] input {background:#10283D !important; color:#F2F7FF !important;}
+[data-baseweb="select"] *, [data-baseweb="popover"] *, [data-baseweb="slider"] *, .stSlider * {color:#F2F7FF !important;}
+.stButton button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] {background:#173651 !important; color:#F2F7FF !important; border:1px solid #46728B !important; font-weight:700 !important;}
+.stButton button:hover {background:#245473 !important; color:white !important;}
+.stTabs [data-baseweb="tab-list"] {background:#0B2034 !important; border-radius:9px;}
+.stTabs [data-baseweb="tab"] {color:#CBDFF1 !important;}
+.stTabs [aria-selected="true"] {color:#6CE6D9 !important; border-bottom:2px solid #6CE6D9 !important;}
+[data-testid="stAlert"] {background:#14293C !important; border:1px solid #315A75 !important;}
+[data-testid="stAlert"] * {color:#EAF3FF !important;}
+[data-testid="stDataFrame"] {background:#10283D !important;}
+.hero {padding:20px 24px;border-radius:15px;border:1px solid #355E79;background:linear-gradient(115deg,#102F4A,#0A2338 70%,#0F3841);margin-bottom:12px;}
+.eyebrow {color:#70E3D7;font-size:11px;font-weight:800;letter-spacing:2.4px;}
+.headline {color:#FFFFFF;font-size:28px;font-weight:850;line-height:1.25;margin:5px 0;}
+.subhead {color:#C8DEEF;font-size:13px;line-height:1.6;}
+.pill {display:inline-block;background:#123D46;color:#97F8E0;border:1px solid #267D81;padding:6px 10px;border-radius:7px;font-size:12px;font-weight:800;margin:3px 6px 3px 0;}
+.pill.warning {background:#493320;color:#FFE1A0;border-color:#91652E;}
+.pill.danger {background:#4A2635;color:#FFD0D8;border-color:#985464;}
+.panel {padding:18px 20px;background:#10283D;border-radius:13px;border:1px solid #315775;margin:10px 0 15px;}
+.panel-title {font-size:16px;color:white;font-weight:800;margin-bottom:5px;}
+.panel-body {font-size:13px;color:#C8DEEF;line-height:1.65;}
+.console {font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.75;white-space:pre-wrap;background:#06111C;border:1px solid #274865;border-radius:10px;padding:13px 16px;color:#BEEBDF;min-height:165px;}
+.sov {padding:14px 16px;border:1px solid #3C6A86;background:#12314A;border-radius:11px;min-height:133px;margin-bottom:6px;}
+.sov strong {color:white;display:block;margin-bottom:6px;font-size:14px;}
+.sov span {color:#C9E0F0;font-size:12px;line-height:1.45;}
 </style>''', unsafe_allow_html=True)
 
-st.markdown('''<div class="hero"><div class="eyebrow">REVORA SPACE HUB · QATAR · CONCEPT TECHNOLOGY DEMONSTRATOR</div>
-<div class="h">HubOS-Sat | GEO Communications Intelligence</div>
-<div class="sub">Es’hailSat-context study • Ku/Ka communications • Al Ghuwariyah teleport • Mission intelligence beyond conventional alarms</div></div>''', unsafe_allow_html=True)
-st.markdown('''<div class="notice">SYNTHETIC REAL-TIME SIMULATION — NOT CONNECTED TO ES’HAILSAT. The named spacecraft and 25.5°E / 26°E orbital neighborhood are public context only. All numeric measurements, engineering models, alarms and events are illustrative; no operational access, qualified AI or existing integration is claimed.</div>''', unsafe_allow_html=True)
+st.markdown('''<div class="hero"><div class="eyebrow">REVORA SPACE HUB · DOHA TO THE WORLD</div>
+<div class="headline">HubOS-Sat | Sovereign Mission Intelligence</div>
+<div class="subhead">GEO communications • AI-assisted incident correlation • Satellite + ground context • Qatar-based IP development<br>
+PROTOTYPE DEMONSTRATION — a fictional Ku/Ka communications service, not Es’hailSat's telemetry or flight software.</div></div>''', unsafe_allow_html=True)
 
-# State: normalizes all values so the simulation can be run in an isolated Streamlit account.
-if 'sim' not in st.session_state:
-    st.session_state.sim = {
-        'running': False, 'tick': 0, 'last_update': time.monotonic(),
-        'temp': 35.0, 'soc': 90.0, 'baseline': 15.0,
-        'history': [], 'events': [], 'previous': set(),
-    }
+@st.cache_resource(show_spinner=False)
+def make_models():
+    r=np.random.default_rng(2026)
+    rows=[]; labels=[]
+    # Features: observed weather fade, measured ground pointing, unexpected RF residual,
+    # spacecraft thermal deviation, battery discharge / minute, link margin.
+    cases=['Nominal','Weather attenuation','Unexplained RF impairment','Ground pointing issue','Spacecraft thermal excursion','GEO eclipse / power stress']
+    for label in cases:
+        for _ in range(390):
+            weather=max(0,r.normal(.8,.55)); pointing=max(0,r.normal(.12,.11)); rf=max(0,r.normal(.12,.13)); thermal=r.normal(0,.45); discharge=max(0,r.normal(.03,.07))
+            if label=='Weather attenuation': weather=r.uniform(3.6,9.8)
+            if label=='Unexplained RF impairment': rf=r.uniform(2.5,6.5)
+            if label=='Ground pointing issue': pointing=r.uniform(1.1,3.5)
+            if label=='Spacecraft thermal excursion': thermal=r.uniform(6.5,17)
+            if label=='GEO eclipse / power stress': discharge=r.uniform(.35,1.35)
+            margin=13-weather-pointing-rf+r.normal(0,.20)
+            rows.append([weather,pointing,rf,thermal,discharge,margin]);labels.append(label)
+    X=np.array(rows);y=np.array(labels)
+    clf=RandomForestClassifier(n_estimators=90,max_depth=11,random_state=12,n_jobs=-1)
+    clf.fit(X,y)
+    normal=X[y=='Nominal']
+    detector=IsolationForest(n_estimators=110,contamination=.035,random_state=13,n_jobs=-1)
+    detector.fit(normal)
+    return detector,clf
 
-sim = st.session_state.sim
+anomaly_model, triage_model = make_models()
+
+if 'history' not in st.session_state:
+    st.session_state.history=[]
+    st.session_state.events=[]
+    st.session_state.tick=0
+    st.session_state.running=False
+    st.session_state.soc=94.0
+    st.session_state.last_alert='Nominal'
+    st.session_state.last_ai='Nominal'
 
 with st.sidebar:
-    st.markdown('## Mission scenario controls')
-    st.caption('Change these during the live demonstration. One tick = one simulated minute.')
-    spacecraft = st.selectbox('Public satellite context (no real telemetry)', ['Es’hail-1 | 25.5°E', 'Es’hail-2 | 26.0°E'])
-    band = st.selectbox('Communications service scenario', ['Ka-band managed link', 'Ku-band broadcast link'])
-    rain = st.slider('Ground-path rain attenuation (dB)', 0.0, 15.0, 0.0, .5)
-    interference = st.slider('Additional RF interference (dB)', 0.0, 7.0, 0.0, .5)
-    heat = st.slider('Modeled payload heat load (relative %)', 50, 170, 100, 5)
-    radiator = st.slider('Thermal rejection effectiveness (%)', 55, 115, 100, 5)
-    payload = st.slider('Payload electrical demand (relative %)', 50, 155, 100, 5)
-    eclipse = st.toggle('GEO eclipse demonstration', value=False)
+    st.markdown('### MISSION INJECTION CONTROLS')
+    st.caption('All values are synthetic. Change a slider while the simulation runs.')
+    c1,c2=st.columns(2)
+    with c1:
+        if st.button('▶ Start' if not st.session_state.running else 'Ⅱ Pause',use_container_width=True):
+            st.session_state.running=not st.session_state.running
+    with c2:
+        if st.button('↺ Reset',use_container_width=True):
+            st.session_state.history=[];st.session_state.events=[];st.session_state.tick=0
+            st.session_state.soc=94.0;st.session_state.last_alert='Nominal';st.session_state.last_ai='Nominal'
+            st.session_state.running=False
+            st.rerun()
+    st.markdown('#### Ground and RF environment')
+    weather=st.slider('Ground-path rain fade (dB)',0.0,10.0,0.5,.5)
+    interference=st.slider('Extra unexplained RF loss (dB)',0.0,7.0,0.0,.5)
+    pointing=st.slider('Ground antenna pointing loss (dB)',0.0,3.5,0.1,.1)
+    st.markdown('#### Spacecraft environment')
+    payload=st.slider('Payload utilization (%)',20,100,55,5)
+    thermal_fault=st.slider('Extra equipment thermal load (°C equivalent)',0.0,15.0,0.0,.5)
+    eclipse=st.toggle('GEO eclipse / solar generation unavailable',value=False)
     st.divider()
-    b1, b2, b3 = st.columns(3)
-    if b1.button('▶ Start', use_container_width=True):
-        sim['running'] = True
-        sim['last_update'] = time.monotonic()
-    if b2.button('Ⅱ Pause', use_container_width=True):
-        sim['running'] = False
-    if b3.button('↺ Reset', use_container_width=True):
-        st.session_state.sim = {
-            'running': False, 'tick': 0, 'last_update': time.monotonic(),
-            'temp': 35.0, 'soc': 90.0, 'baseline': 15.0,
-            'history': [], 'events': [], 'previous': set()
-        }
-        st.rerun()
-    st.caption('A simplified conceptual model, not Es’hailSat engineering specifications. The satellite name is a scenario label only.')
+    st.caption('The AI algorithms run locally in this Streamlit application. The data is synthetic and not connected to Es’hailSat.')
 
-# This model intentionally separates ground signal attenuation from spacecraft thermal and power behavior.
-# Assumed baseline reference values are arbitrary but internally consistent for demonstration.
-def compute_sample(s):
-    s['tick'] += 1
-    t = s['tick']
-    # thermal lag: synthetic temperature responds smoothly to load and heat rejection.
-    expected_temp = 35.0 + 0.6 * math.sin(t / 11)
-    temp_target = 35.0 + 0.13 * (heat - 100) - 0.16 * (radiator - 100)
-    s['temp'] += .13 * (temp_target - s['temp'])
-    actual_temp = s['temp'] + 0.15 * math.sin(t / 4)
-    # Only eclipse and power imbalance deplete battery in this simplified GEO scenario.
-    solar_available = 0 if eclipse else 1.0
-    demand_kw = 7.0 * (payload / 100)
-    supply_kw = 9.0 * solar_available
-    battery_delta = (supply_kw - demand_kw) / 25.0 * 100 / 60
-    s['soc'] = min(99.0, max(0.0, s['soc'] + battery_delta))
-    # Synthetic 'power balance' intentionally in kW rather than ungrounded bus voltage.
-    # Rain attenuation is applied to a *ground path*, not spacecraft health.
-    nominal_margin = 13.0 if band.startswith('Ka') else 10.0
-    link_margin = nominal_margin - rain - interference + .15 * math.sin(t / 5)
-    predicted = nominal_margin - rain + .15 * math.sin(t / 5) # weather-informed reference
-    unexplained = link_margin - predicted # interference residual
-    # A fictional received signal quality metric; modeled as margin, not fake RF health score.
-    sample = {
-        'Minute': t, 'Actual thermal °C': round(actual_temp, 3),
-        'Reference thermal °C': round(expected_temp, 3),
-        'GEO battery SOC %': round(s['soc'], 3),
-        'Solar available kW': round(supply_kw, 3),
-        'Payload demand kW': round(demand_kw, 3),
-        'Observed link margin dB': round(link_margin, 3),
-        'Weather-only expected margin dB': round(predicted, 3),
-        'Unexplained RF residual dB': round(unexplained, 3),
-        'Ground rain loss dB': rain,
-        'Interference loss dB': interference,
-    }
-    s['history'].append(sample)
-    s['history'] = s['history'][-180:]
-    flags = []
-    if link_margin < 3: flags.append(('RF LINK', 'Link margin below illustrative 3 dB review threshold', 'warn'))
-    if abs(unexplained) > 1.5: flags.append(('CORRELATION', 'Observed RF loss exceeds weather-only prediction: check interference / ground chain', 'error'))
-    if actual_temp - expected_temp > 5: flags.append(('THERMAL', 'Thermal residual exceeds illustrative 5°C threshold', 'warn'))
-    if eclipse and s['soc'] < 65: flags.append(('ECLIPSE', 'Battery SOC below illustrative 65% review threshold', 'warn'))
-    current = {item[0] for item in flags}
-    for code, message, level in flags:
-        if code not in s['previous']:
-            s['events'].insert(0, (t, code, message, level))
-    for old_code in s['previous'] - current:
-        s['events'].insert(0, (t, 'RECOVERY', f'{old_code} condition cleared', 'event'))
-    if t == 1: s['events'].insert(0, (t, 'START', 'Synthetic GEO communications telemetry initiated', 'event'))
-    s['previous'] = current
-    s['events'] = s['events'][:14]
 
-# The fragment makes the content automatically redraw while running; sliders trigger full reruns.
+def push_tick():
+    ss=st.session_state; t=ss.tick; r=np.random.default_rng(1091+t)
+    # illustrative physics; NOT fitted to any Es'hailSat spacecraft or RF link.
+    predicted_cn0=79.0-weather-pointing
+    observed_cn0=predicted_cn0-interference+r.normal(0,.12)
+    rf_residual=max(0,predicted_cn0-observed_cn0)
+    link_margin=13.0-weather-pointing-rf_residual
+    temp=31.0+payload*.085+thermal_fault+r.normal(0,.14)
+    thermal_dev=temp-(31.0+payload*.085)
+    power_load=5.1+payload*.060 # kW, illustrative, not a fleet specification
+    solar=0.0 if eclipse else 13.2
+    net=solar-power_load
+    # 32 kWh fictional battery: % per simulated minute.
+    soc_before=ss.soc
+    ss.soc=float(np.clip(ss.soc+(net/60/32)*100,0,100))
+    discharge=max(0,soc_before-ss.soc)
+    feature=np.array([[weather,pointing,rf_residual,thermal_dev,discharge,link_margin]])
+    outlier=anomaly_model.predict(feature)[0]==-1
+    raw=anomaly_model.decision_function(feature)[0]
+    probs=triage_model.predict_proba(feature)[0]
+    label=str(triage_model.classes_[np.argmax(probs)])
+    model_probability=float(np.max(probs))
+    # No claim of statistically calibrated confidence: scores only on simulated scenarios.
+    status='REVIEW' if outlier else 'NOMINAL'
+    if outlier and label=='Nominal':label='Unclassified deviation'
+    record=dict(t=t,cn0=observed_cn0,expected_cn0=predicted_cn0,margin=link_margin,
+                thermal=temp,thermal_expected=31+payload*.085,soc=ss.soc,
+                power_load=power_load,solar=solar,weather=weather,pointing=pointing,
+                rf_residual=rf_residual,thermal_dev=thermal_dev,discharge=discharge,
+                anomaly=outlier,score=raw,classification=label,probability=model_probability,
+                status=status)
+    ss.history.append(record);ss.history=ss.history[-180:]
+    if t==0:
+        ss.events.append(f'T+{t:04d}  SESSION INITIALIZED / simulated GEO communications service')
+        ss.events.append(f'T+{t:04d}  ISOLATION FOREST + RANDOM FOREST initialized on synthetic training data')
+    if outlier and (ss.last_alert!='REVIEW' or ss.last_ai!=label):
+        ss.events.append(f'T+{t:04d}  AI FLAG → {label.upper()} | investigate cross-source evidence')
+    elif not outlier and ss.last_alert=='REVIEW':
+        ss.events.append(f'T+{t:04d}  AI FLAG CLEARED → returned to simulated baseline')
+    if t>0 and t%15==0: ss.events.append(f'T+{t:04d}  MONITORING → {status} | link margin {link_margin:.1f} dB')
+    ss.events=ss.events[-14:]
+    ss.last_alert=status;ss.last_ai=label;ss.tick+=1
+
+
+def make_chart(df,cols,title,unit,limits=None):
+    colors=['#59E0D4','#63BDF4','#FFB969']
+    fig=go.Figure()
+    for i,(key,name) in enumerate(cols):
+        fig.add_trace(go.Scatter(x=df.t,y=df[key],name=name,mode='lines',
+            line=dict(color=colors[i%len(colors)],width=2.6),
+            hovertemplate='T+%{x} min<br>%{y:.2f} '+unit+'<extra>'+name+'</extra>'))
+    if limits is not None:
+        fig.add_hline(y=limits,line_dash='dot',line_color='#FFAA75',annotation_text='Example review threshold',annotation_font_color='#FFD39A')
+    fig.update_layout(height=267,margin=dict(l=10,r=12,t=24,b=7),
+        paper_bgcolor='#10283D',plot_bgcolor='#10283D',font=dict(color='#EAF3FF',size=11),
+        xaxis=dict(title='Simulated elapsed minutes',gridcolor='#29475F',zeroline=False),
+        yaxis=dict(title=unit,gridcolor='#29475F',zeroline=False),
+        legend=dict(orientation='h',y=1.20,x=0,bgcolor='#10283D'),hovermode='x unified')
+    st.plotly_chart(fig,use_container_width=True,config={'displayModeBar':False},key='plot_'+title.replace(' ','_'))
+
+
 @st.fragment(run_every='1s')
-def live_console():
-    s = st.session_state.sim
-    if s['running']:
-        compute_sample(s)
-    elif not s['history']:
-        compute_sample(s)
-    row = s['history'][-1]
-    flags = list(s['previous'])
-    status = 'INVESTIGATE' if flags else 'WITHIN ILLUSTRATIVE LIMITS'
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric('SIMULATED MISSION TIME', f"T+{s['tick']:05d} min")
-    c2.metric('LINK MARGIN', f"{row['Observed link margin dB']:.1f} dB")
-    c3.metric('THERMAL DEVIATION', f"{row['Actual thermal °C']-row['Reference thermal °C']:+.1f} °C")
-    c4.metric('ECLIPSE BATTERY SOC', f"{row['GEO battery SOC %']:.1f}%")
-    if flags:
-        st.error(f"HUBOS-SAT ANALYSIS • {status} • {', '.join(flags)}")
-    else:
-        st.success(f"HUBOS-SAT ANALYSIS • {status} • {'RUNNING' if s['running'] else 'PAUSED'}")
-    hist = pd.DataFrame(s['history'])
-    cfg = dict(displayModeBar=False, responsive=True)
-    def make_chart(keys, title, unit, limits=None):
-        fig = go.Figure()
-        colors = ['#59dfce', '#81aefa', '#f6ca78', '#fc8d99']
-        for j, key in enumerate(keys):
-            fig.add_trace(go.Scatter(x=hist['Minute'], y=hist[key], mode='lines', name=key,
-                                     line=dict(color=colors[j % len(colors)], width=2.8)))
-        if limits is not None:
-            fig.add_hline(y=limits, line=dict(color='#f6ca78', dash='dash', width=1),
-                          annotation_text='Illustrative review threshold', annotation_font_color='#f6ca78')
-        fig.update_layout(title=dict(text=title, font=dict(color='#ffffff', size=15)),
-                          paper_bgcolor='#10263b', plot_bgcolor='#10263b',
-                          font=dict(color='#eaf5ff', size=11), height=285,
-                          margin=dict(l=15,r=20,t=45,b=10),
-                          xaxis=dict(title='Simulated elapsed minutes', gridcolor='#2a435b', color='#dceeff'),
-                          yaxis=dict(title=unit, gridcolor='#2a435b', color='#dceeff'),
-                          legend=dict(orientation='h', y=-.38, font=dict(color='#eaf5ff')))
-        return fig
-    graph_left, graph_right = st.columns(2)
-    with graph_left:
-        st.plotly_chart(make_chart(['Observed link margin dB','Weather-only expected margin dB'],
-                                  'Ku/Ka ground-path margin | observed vs weather model', 'dB'),
-                        use_container_width=True, config=cfg)
-        st.plotly_chart(make_chart(['Actual thermal °C','Reference thermal °C'],
-                                  'Spacecraft thermal | modeled vs reference', '°C'),
-                        use_container_width=True, config=cfg)
-    with graph_right:
-        st.plotly_chart(make_chart(['Unexplained RF residual dB'],
-                                  'Cross-source intelligence | unexplained RF loss', 'dB'),
-                        use_container_width=True, config=cfg)
-        st.plotly_chart(make_chart(['GEO battery SOC %'],
-                                  'GEO eclipse demonstration | battery SOC', '%'),
-                        use_container_width=True, config=cfg)
-    st.markdown('### Live analysis: what an additional intelligence layer could contribute')
-    if abs(row['Unexplained RF residual dB']) > 1.5:
-        st.markdown('''<div class="panel"><h3>RF loss not fully explained by weather</h3><p>The model compares a weather-adjusted expectation against the combined observed link impairment. An extra residual is visible. In a real pilot, an operator would validate whether interference, antenna pointing, equipment faults, or measurement uncertainty explain it. <b>This is not a real cause diagnosis.</b></p></div>''', unsafe_allow_html=True)
-    elif row['Observed link margin dB'] < 3:
-        st.markdown('''<div class="panel"><h3>Weather-correlated link degradation</h3><p>Rain attenuation explains most of the modeled reduction. A possible next step is combining measured RF metrics with local weather observations, SLA information and ground-station history to support service-impact analysis.</p></div>''', unsafe_allow_html=True)
-    elif row['Actual thermal °C']-row['Reference thermal °C'] > 5:
-        st.markdown('''<div class="panel"><h3>Thermal residual requires engineering review</h3><p>The actual modeled temperature is above its synthetic expected baseline. An operator could review payload operating mode, heater states, radiation exposure and redundant sensors. HubOS-Sat would present evidence, not issue spacecraft commands.</p></div>''', unsafe_allow_html=True)
-    elif eclipse:
-        st.markdown('''<div class="panel"><h3>GEO eclipse power-balance watch</h3><p>Solar generation is zero in this scenario. Modeled battery state-of-charge declines as the spacecraft supplies payload demand. This is a simplified demonstration of an eclipse period, not an actual Es’hailSat power-system model.</p></div>''', unsafe_allow_html=True)
-    else:
-        st.markdown('''<div class="panel"><h3>Baseline relationship is consistent</h3><p>The weather-adjusted link margin and observed synthetic telemetry align within the model. Test a rain fade event, then add RF interference. The key distinction is that the software distinguishes an expected weather-related change from an additional unexplained loss.</p></div>''', unsafe_allow_html=True)
-    st.markdown('### Mission event console')
-    logs = []
-    for t, code, msg, level in s['events'][:8]:
-        logs.append(f'<div class="line"><span class="{level}">T+{t:05d} [{code}]</span> — {msg}</div>')
-    if not logs: logs.append('<div class="line">No events recorded</div>')
-    st.markdown('<div class="console">'+''.join(logs)+'</div>', unsafe_allow_html=True)
-    st.caption('All data, model values, event timings, thresholds and analytics are synthetic. Live means the demo computes new values while running, not a live satellite feed.')
+def mission_view():
+    if st.session_state.running or not st.session_state.history:
+        push_tick()
+    df=pd.DataFrame(st.session_state.history)
+    current=df.iloc[-1]
+    live='LIVE SYNTHETIC STREAM' if st.session_state.running else 'PAUSED / SYNTHETIC STREAM'
+    pill='danger' if bool(current.anomaly) else ''
+    st.markdown(f'''<span class="pill">{live}</span><span class="pill">MET T+{int(current.t):05d} min</span>
+    <span class="pill {pill}">AI {str(current.status)}</span><span class="pill">READ-ONLY CONCEPT</span>''',unsafe_allow_html=True)
+    m1,m2,m3,m4,m5=st.columns(5)
+    m1.metric('Observed C/N₀',f'{current.cn0:.1f} dB-Hz')
+    m2.metric('Link margin',f'{current.margin:.1f} dB')
+    m3.metric('RF residual',f'{current.rf_residual:.2f} dB')
+    m4.metric('Equipment temperature',f'{current.thermal:.1f} °C')
+    m5.metric('Battery state of charge',f'{current.soc:.1f}%')
+    tab1,tab2,tab3=st.tabs(['MISSION CONSOLE','AI INTELLIGENCE','QATAR SOVEREIGN CAPABILITY'])
+    with tab1:
+        a,b=st.columns(2)
+        with a:
+            st.markdown('#### Ku/Ka ground-link signal behaviour')
+            make_chart(df,[('cn0','Observed C/N₀'),('expected_cn0','Weather/pointing expected')],'rf_link','dB-Hz')
+            st.markdown('#### Spacecraft equipment thermal response')
+            make_chart(df,[('thermal','Modeled observed'),('thermal_expected','Expected baseline')],'thermal','°C')
+        with b:
+            st.markdown('#### Available link margin')
+            make_chart(df,[('margin','Calculated margin')],'link_margin','dB',limits=3)
+            st.markdown('#### Spacecraft battery & power')
+            make_chart(df,[('soc','Battery state of charge')],'battery','%')
+        left,right=st.columns([1.2,1])
+        with left:
+            st.markdown('#### Mission event console')
+            logs='\n'.join(reversed(st.session_state.events[-9:]))
+            st.markdown('<div class="console">'+logs.replace('&','&amp;').replace('<','&lt;')+'</div>',unsafe_allow_html=True)
+        with right:
+            st.markdown('#### Cross-system state')
+            st.dataframe(pd.DataFrame([
+                ['Ground weather',f'{current.weather:.1f} dB attenuation'],
+                ['Pointing',f'{current.pointing:.1f} dB measured loss'],
+                ['RF unexplained residual',f'{current.rf_residual:.2f} dB'],
+                ['Payload power',f'{current.power_load:.1f} kW model'],
+                ['Solar power',f'{current.solar:.1f} kW model'],
+                ['Power balance',f'{current.solar-current.power_load:+.1f} kW model'],
+            ],columns=['Source','Current reading']),hide_index=True,use_container_width=True)
+    with tab2:
+        st.markdown('### AI layer: what the operating console does not tell you by itself')
+        x,y=st.columns([1,1])
+        with x:
+            st.metric('Isolation Forest anomaly score',f'{current.score:+.3f}',help='Negative is unusual relative to synthetic nominal training data; not a real mission risk score.')
+            st.metric('Synthetic scenario classification',str(current.classification))
+            st.metric('Model vote share',f'{current.probability*100:.0f}%',help='Share of random-forest votes on synthetic patterns, NOT calibrated confidence on real Es’hailSat data.')
+            st.markdown('''<div class="panel"><div class="panel-title">Two actual ML components</div>
+                <div class="panel-body"><b>Isolation Forest</b> tests whether the latest multi-source state differs from a synthetic nominal baseline.<br>
+                <b>Random Forest</b> sorts abnormal states into synthetic weather, interference, pointing, thermal, or eclipse patterns.<br><br>
+                Neither model is trained on Es’hailSat data. All outputs require engineering validation before operational use.</div></div>''',unsafe_allow_html=True)
+        with y:
+            explanation=[]
+            if current.weather>=3:explanation.append(f'Ground-path weather attenuation is elevated ({current.weather:.1f} dB).')
+            if current.rf_residual>=1.6:explanation.append(f'Observed signal is {current.rf_residual:.1f} dB worse than weather/pointing model predicts: review additional RF causes.')
+            if current.pointing>=1:explanation.append(f'Ground antenna pointing-loss proxy is elevated ({current.pointing:.1f} dB).')
+            if current.thermal_dev>=5:explanation.append('Spacecraft thermal reading diverges from the payload-dependent reference.')
+            if current.discharge>=.35:explanation.append('Battery is discharging rapidly in the simulated power model; check eclipse and net load.')
+            if not explanation:explanation=['Measured values remain close to the simplified reference model.']
+            st.markdown('#### Cross-source reasoning')
+            for item in explanation:st.markdown('• '+item)
+            st.markdown('#### Operator-facing next step')
+            st.info('Compare the flagged sources with existing RF/TT&C alarms, weather logs and engineering procedures. Preserve operator control; do not uplink commands.')
+            st.markdown('''<div class="panel"><div class="panel-title">Potential value beyond current monitoring</div>
+            <div class="panel-body">One incident context that combines <b>ground weather + RF measurements + engineering reference models + spacecraft health</b>.
+            The commercial test is whether this reduces investigation time or improves triage versus Es’hailSat's existing tools.</div></div>''',unsafe_allow_html=True)
+        st.markdown('#### Observed vs expected: explanation of an apparent link fault')
+        c1,c2,c3=st.columns(3)
+        c1.metric('Expected C/N₀',f'{current.expected_cn0:.2f} dB-Hz')
+        c2.metric('Observed C/N₀',f'{current.cn0:.2f} dB-Hz')
+        c3.metric('Unexplained difference',f'{current.rf_residual:.2f} dB')
+    with tab3:
+        st.markdown('### Software sovereignty is built through capability, control and IP — not through a dashboard')
+        st.write('HubOS-Sat is proposed as a Qatar-developed, operator-validated software product. This demonstration shows the *types* of capability ReVora could build; it does not establish national sovereignty by itself.')
+        q1,q2,q3=st.columns(3)
+        with q1:
+            st.markdown('<div class="sov"><strong>01 · Local engineering and IP</strong><span>Build the telemetry normalization, anomaly models, test harness and application source code through a Qatar-based development team. Define background and foreground IP by contract.</span></div>',unsafe_allow_html=True)
+        with q2:
+            st.markdown('<div class="sov"><strong>02 · Qatar-controlled deployment</strong><span>Offer an Es’hailSat-approved isolated or on-premises deployment, with access logs, data residency and operator-managed permissions. No telemetry leaves its approved boundary.</span></div>',unsafe_allow_html=True)
+        with q3:
+            st.markdown('<div class="sov"><strong>03 · Independent technical capability</strong><span>Document interfaces, train engineers, support local maintainability and test interoperability. Sovereignty requires operational competence and contractual control, not just asset location.</span></div>',unsafe_allow_html=True)
+        st.markdown('### Complementing Es’hailSat, not replacing it')
+        st.dataframe(pd.DataFrame([
+            ['Existing TT&C, RF/baseband/transport monitoring','Established operator capability','Read-only, cross-source analytics evaluated beside existing tools'],
+            ['Fleet service operations and incident response','Es’hailSat-led operational decisions','AI-assisted triage and evidence summarization for operator review'],
+            ['Secure ground infrastructure','Es’hailSat defines cyber/data controls','Qatar-hosted, access-controlled software product if approved'],
+            ['Future communications expansion','Operator/partners define real mission needs','Qatar-built software modules and possible future partner-led missions'],
+        ],columns=['Area','Operator role','Proposed ReVora contribution']),hide_index=True,use_container_width=True)
+        st.markdown('''<div class="panel"><div class="panel-title">A concrete, testable partnership request</div>
+        <div class="panel-body">Select one existing operational problem. Jointly agree a <b>read-only test dataset</b>, compare HubOS-Sat against current triage processes and set measurable acceptance criteria (false positives, incident classification, time to root-cause hypothesis, engineer utility).<br><br>
+        If validated: agree licensing, Qatar-based engineering and IP boundaries before any production deployment.</div></div>''',unsafe_allow_html=True)
+    st.caption('All readings, model training examples, thresholds, mission time, and recommendations are synthetic. This is a demonstrator of feasible ML techniques, not an operationally validated Es’hailSat system. Real outcomes and integration depend on Es’hailSat requirements and authorization.')
 
-main, project, next_steps = st.tabs(['01  •  LIVE GEO OPERATIONS', '02  •  SECURE CO-DEVELOPMENT', '03  •  VALIDATION ROADMAP'])
-with main:
-    st.markdown('#### Suggested demonstration: Start → add rain fade → add interference → observe the unexplained RF residual. Then enable GEO eclipse to see battery response.')
-    live_console()
-with project:
-    st.markdown('### Es’hailSat already monitors and controls its spacecraft. What would ReVora add?')
-    a, b, c = st.columns(3)
-    with a:
-        st.markdown('''<div class="panel"><h3>1 · Existing operator systems</h3><p>Es’hailSat operates spacecraft TT&C, capacity management and satellite services. Its teleport provides monitored RF, baseband and transport-stream services. This demonstration does not imply any capability gap.</p></div>''', unsafe_allow_html=True)
-    with b:
-        st.markdown('''<div class="panel"><h3>2 · Proposed read-only bridge</h3><p>Subject to Es’hailSat approval, obtain selected historical telemetry, weather records and link-quality signals through a filtered dataset or isolated interface. No spacecraft commands or production-network access.</p></div>''', unsafe_allow_html=True)
-    with c:
-        st.markdown('''<div class="panel"><h3>3 · HubOS-Sat intelligence</h3><p>Develop cross-source correlation, anomalies against engineering baselines, explainable events and operator investigation evidence. Demonstrate measurable benefit over existing tools before discussing deployment.</p></div>''', unsafe_allow_html=True)
-    st.markdown('**Proposed evaluation use case:** weather-correlated RF degradation versus additional unexplained impairment on an approved Ku/Ka service dataset.')
-    st.info('Not an installed product. This proof of concept uses synthetic data and transparent rules; any ML, digital twin, live interface or predictive accuracy would require engineering and commercial validation.')
-    st.markdown('**Data boundary**  •  Es’hailSat controls access and data rights  •  ReVora develops a test module  •  Human operators remain responsible  •  Background IP and new IP terms require a separate agreement')
-with next_steps:
-    st.markdown('### From interactive concept to a practical engineering pilot')
-    steps = [
-        ('01  Technical alignment', 'Select a real operator pain point and nominate Es’hailSat / ReVora technical counterparts.'),
-        ('02  Data feasibility & security', 'Agree scope of read-only historical RF, weather and/or spacecraft telemetry and the evaluation environment.'),
-        ('03  Limited proof of concept', 'Build a transparent baseline; test anomaly correlation with labeled incidents and known false positives.'),
-        ('04  Measured evaluation', 'Compare with existing workflows using precision, false-alert rate, time to investigation and engineer acceptance.'),
-        ('05  Conditional product discussion', 'If useful, negotiate pilot integration, support model, commercial licensing and Qatar-based IP development.'),
-    ]
-    for heading, desc in steps:
-        st.markdown(f'<div class="panel"><h3>{heading}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
-    st.markdown('**Proposed meeting ask:** “Could we hold a joint technical workshop to assess a read-only, securely scoped data pilot for cross-source link-health analytics?”')
-    st.markdown('#### Public context behind the tailored scenario')
-    st.markdown('- [Es’hailSat satellites: Es’hail-1 and Es’hail-2, Ku/Ka payloads](https://www.eshailsat.qa/satellites/)')
-    st.markdown('- [Es’hailSat teleport services including TT&C and capacity management](https://www.eshailsat.qa/wp-content/uploads/2025/04/Teleport-Services.pdf)')
-    st.markdown('- [Es’hailSat products and services](https://www.eshailsat.qa/products-services/)')
-
-st.divider()
-st.caption('© ReVora — HubOS-Sat prototype concept. Synthetic data only. Es’hailSat is a prospective technical collaboration partner; no affiliation, endorsement or access is implied.')
+mission_view()
