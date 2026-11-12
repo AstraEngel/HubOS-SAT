@@ -1,240 +1,265 @@
+"""ReVora HubOS-Sat | Es'hailSat-context GEO Communications Intelligence DEMO.
+All telemetry is synthetic, fictional and not calibrated to Es'hailSat spacecraft.
+"""
+import math
 import time
+from collections import deque
+from datetime import datetime, timezone
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
-st.set_page_config(page_title="ReVora | HubOS-Sat Mission Intelligence", page_icon="🛰️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="ReVora | HubOS-Sat GEO Intelligence", page_icon="🛰️", layout="wide", initial_sidebar_state="expanded")
 
-# Strong contrast across Streamlit's built-in controls and the custom dashboard.
-st.markdown("""<style>
-:root { color-scheme: dark; }
+# Explicitly style common Streamlit components: no light panels with light text.
+st.markdown('''<style>
+:root {color-scheme:dark}
 html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"],
-[data-testid="stSidebar"], [data-testid="stBottom"], [data-testid="stMain"] {
- background:#07111f !important; color:#edf5ff !important;
+[data-testid="stSidebar"], [data-testid="stBottom"], [data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {background:#071321 !important;color:#e8f3ff !important;}
+.stApp, .stApp * {font-family:Inter, system-ui, -apple-system, "Segoe UI", sans-serif;}
+.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp p,.stApp label,
+.stApp span,.stApp small, .stApp li {color:#e8f3ff;}
+[data-testid="stWidgetLabel"] p, [data-testid="stMetricLabel"] *,
+[data-testid="stMetricLabel"], [data-testid="stMetricValue"] *,
+[data-testid="stMetricValue"], [data-testid="stMetricDelta"] *,
+[data-testid="stCaptionContainer"] * {color:#ecf6ff !important;opacity:1 !important;}
+[data-testid="stMetric"] {background:#10263b !important;border:1px solid #355775 !important;border-radius:12px;padding:13px 14px;}
+[data-testid="stMetricLabel"] {font-weight:750 !important;}
+[data-testid="stMarkdownContainer"] {color:#e8f3ff !important;}
+[data-baseweb="select"] > div, [data-baseweb="popover"] > div,
+[data-baseweb="menu"], [data-baseweb="input"] > div,
+[data-baseweb="slider"] {background:#122a43 !important;color:#fff !important;}
+[data-baseweb="select"] *, [data-baseweb="popover"] *, [data-baseweb="menu"] * {color:#fff !important;}
+[data-testid="stAlert"] {background:#183148 !important;border-color:#40627f !important;}
+[data-testid="stAlert"] * {color:#f6fbff !important;}
+.stButton button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] {
+ background:#173a56 !important;color:#fff !important;border:1px solid #487b96 !important;font-weight:750 !important;
 }
-[data-testid="stSidebar"] {background:#101f31 !important;border-right:1px solid #30465d;}
-.stApp p,.stApp span,.stApp label,.stApp small,.stApp li,.stApp h1,.stApp h2,.stApp h3,
-.stApp h4,.stApp strong,[data-testid="stWidgetLabel"] *,[data-testid="stMarkdownContainer"] *,
-[data-testid="stCaptionContainer"] *,[data-testid="stMetricLabel"] *,[data-testid="stMetricValue"] *,
-[data-testid="stMetricDelta"] *,[data-testid="stSlider"] *,[data-testid="stToggle"] * {
- color:#edf5ff !important; opacity:1 !important;
-}
-[data-testid="stCaptionContainer"] *, .stApp .subtle {color:#b9d0e8 !important;}
-[data-testid="stMetric"] {background:#12263b!important;border:1px solid #395672;border-radius:12px;padding:12px;}
-[data-testid="stMetricLabel"] p{font-size:14px!important;font-weight:700!important;}
-[data-testid="stMetricValue"] {color:#fff!important;}
-[data-baseweb="select"]>div,[data-baseweb="popover"]>div,[role="listbox"],
-[data-baseweb="input"]>div {background:#12263b!important;color:#fff!important;border-color:#42617d!important;}
-[data-baseweb="select"] span,[role="option"] span,[role="listbox"] * {color:#f6faff!important;}
-button[data-baseweb="tab"] {color:#d5e8fa!important;background:#101f31!important;border-radius:6px 6px 0 0;}
-button[data-baseweb="tab"][aria-selected="true"] {color:#76f8dc!important;border-bottom:2px solid #3ce0c5!important;}
-.stButton>button {background:#174b5c!important;color:#fff!important;border:1px solid #51a9b3!important;}
-.stButton>button *{color:#fff!important;}
-.stButton>button:hover{background:#206477!important;}
-[data-testid="stAlert"] {background:#162b40!important;border:1px solid #466987!important;}
-[data-testid="stAlert"] *{color:#f6faff!important;}
-[data-testid="stExpander"] {background:#12263b!important;border:1px solid #42617d!important;}
-[data-testid="stDataFrame"], [data-testid="stTable"] {background:#12263b!important;}
-hr{border-color:#39516a!important;}
-.hero {padding:21px 24px;border:1px solid #35647b;border-radius:15px;background:linear-gradient(110deg,#112f48,#0b2033);margin-bottom:10px;}
-.kicker {font-size:11px;letter-spacing:2px;font-weight:800;color:#6ff0d6!important;}
-.hero-title {font-size:30px;font-weight:800;color:white!important;margin:3px 0;}
-.hero-sub{color:#d1e5f6!important;font-size:14px;}
-.pill {display:inline-block;border-radius:20px;padding:5px 11px;font-size:12px;font-weight:800;border:1px solid #47748b;background:#152e46;color:#e9faff!important;}
-.pill.good{background:#123b39;border-color:#249e86;color:#8ff7dc!important;}
-.pill.warn{background:#45331d;border-color:#dba047;color:#ffe0a8!important;}
-.pill.bad{background:#4b202d;border-color:#e37580;color:#ffd1d8!important;}
-.panel {background:#10243a;border:1px solid #35536f;border-radius:12px;padding:14px 17px;margin-bottom:10px;}
-.panel h4 {margin:0 0 7px;color:#fff!important;}
-.panel p{color:#d8e9f8!important;margin:4px 0;font-size:13px;}
-.mini {font-size:11px;color:#a9c3da!important;letter-spacing:.6px;}
-.big {font-size:24px;font-weight:800;color:#fff!important;}
-.log {font-family:monospace;font-size:12px;padding:9px 10px;margin-bottom:5px;background:#0a1b2c;border-left:3px solid #39b5ad;color:#e2f5ff!important;border-radius:4px;}
-.flow {text-align:center;background:#132c44;border:1px solid #3d6781;border-radius:10px;padding:15px 8px;min-height:120px;}
-.flow strong{display:block;color:#fff!important;font-size:15px;}
-.flow small{color:#c1d6e8!important;font-size:12px;}
-</style>""",unsafe_allow_html=True)
+.stButton button:hover {background:#235573 !important;}
+[data-testid="stTabs"] button {color:#eff8ff !important;}
+hr {border-color:#304a61 !important;}
+.hero {padding:22px 26px;border:1px solid #366987;border-radius:16px;background:linear-gradient(115deg,#123452,#0a2034 62%,#113b43);margin-bottom:14px;}
+.hero .eyebrow {font-size:11px;font-weight:800;letter-spacing:2px;color:#64e1d2 !important;}
+.hero .h {font-size:30px;line-height:1.2;font-weight:850;color:#fff !important;margin:7px 0;}
+.hero .sub {font-size:14px;color:#c8e4ef !important;}
+.notice {background:#253320;border:1px solid #8b914c;border-radius:8px;padding:9px 13px;color:#fff4c9 !important;font-size:12px;font-weight:700;margin:6px 0 16px;}
+.panel {border:1px solid #345670;background:#10263b;border-radius:13px;padding:17px 18px;margin:5px 0 12px;}
+.panel h3 {margin:0 0 9px 0;color:#f5fbff !important;font-size:17px;}
+.panel p {font-size:13px;color:#d8e8f5 !important;line-height:1.65;margin:0;}
+.chip {display:inline-block;border:1px solid #4c8294;background:#113c4b;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:800;color:#d3faf2 !important;margin-right:6px;}
+.chip.alert {background:#512e36;border-color:#bd6675;color:#ffe2e5 !important;}
+.chip.warn {background:#554126;border-color:#b78a3e;color:#fff0cc !important;}
+.console {background:#091a2a;border:1px solid #38566d;border-radius:10px;padding:12px 15px;font-family:ui-monospace, Consolas,monospace;font-size:12px;min-height:160px;}
+.console .line {font-family:ui-monospace,Consolas,monospace;color:#d4e9f7 !important;padding:4px 0;border-bottom:1px solid #1d3449;}
+.console .event {color:#6ce2cf !important;font-weight:800;}
+.console .warn {color:#ffd083 !important;}
+.console .error {color:#ff989f !important;}
+.small {font-size:12px;color:#bcd3e7 !important;}
+</style>''', unsafe_allow_html=True)
 
-st.markdown("""<div class="hero"><div class="kicker">REVORA SPACE HUB · DOHA / QATAR · TECHNOLOGY CONCEPT</div>
-<div class="hero-title">HubOS-Sat &nbsp; / &nbsp; Mission Intelligence</div>
-<div class="hero-sub">Live engineering-style simulator for an Es’hailSat partnership discussion · Sovereign software development pathway</div></div>""",unsafe_allow_html=True)
-st.caption("SYNTHETIC DATA ONLY · Fictional GEO communications platform · Illustrative models and alert rules · No connection to Es’hailSat systems · No onboard software or command authority")
+st.markdown('''<div class="hero"><div class="eyebrow">REVORA SPACE HUB · QATAR · CONCEPT TECHNOLOGY DEMONSTRATOR</div>
+<div class="h">HubOS-Sat | GEO Communications Intelligence</div>
+<div class="sub">Es’hailSat-context study • Ku/Ka communications • Al Ghuwariyah teleport • Mission intelligence beyond conventional alarms</div></div>''', unsafe_allow_html=True)
+st.markdown('''<div class="notice">SYNTHETIC REAL-TIME SIMULATION — NOT CONNECTED TO ES’HAILSAT. The named spacecraft and 25.5°E / 26°E orbital neighborhood are public context only. All numeric measurements, engineering models, alarms and events are illustrative; no operational access, qualified AI or existing integration is claimed.</div>''', unsafe_allow_html=True)
 
-DEFAULTS = {"tick": 0, "running": False, "thermal": 33.0, "soc": 86.0, "voltage": 28.2, "link": 11.8, "rf": 95.0, "history": [], "events": [], "last_wall": time.monotonic(), "last_alert": "", "playback": 1}
-for k,v in DEFAULTS.items():
-    if k not in st.session_state:
-        st.session_state[k] = v.copy() if isinstance(v,list) else v
+# State: normalizes all values so the simulation can be run in an isolated Streamlit account.
+if 'sim' not in st.session_state:
+    st.session_state.sim = {
+        'running': False, 'tick': 0, 'last_update': time.monotonic(),
+        'temp': 35.0, 'soc': 90.0, 'baseline': 15.0,
+        'history': [], 'events': [], 'previous': set(),
+    }
+
+sim = st.session_state.sim
 
 with st.sidebar:
-    st.markdown("### Mission controls")
-    st.caption("Move controls during playback. Responses are calculated from the synthetic system model.")
-    thermal_load = st.slider("Equipment heat load (W)", 40, 150, 60, 5)
-    cooling = st.slider("Cooling effectiveness (%)", 20, 100, 85, 5)
-    generation = st.slider("Solar power supply (W)", 250, 750, 550, 25)
-    demand = st.slider("Electrical demand (W)", 250, 750, 470, 25)
-    rain = st.slider("Ground terminal rain fade (dB)", 0.0, 12.0, 0.0, 0.5)
+    st.markdown('## Mission scenario controls')
+    st.caption('Change these during the live demonstration. One tick = one simulated minute.')
+    spacecraft = st.selectbox('Public satellite context (no real telemetry)', ['Es’hail-1 | 25.5°E', 'Es’hail-2 | 26.0°E'])
+    band = st.selectbox('Communications service scenario', ['Ka-band managed link', 'Ku-band broadcast link'])
+    rain = st.slider('Ground-path rain attenuation (dB)', 0.0, 15.0, 0.0, .5)
+    interference = st.slider('Additional RF interference (dB)', 0.0, 7.0, 0.0, .5)
+    heat = st.slider('Modeled payload heat load (relative %)', 50, 170, 100, 5)
+    radiator = st.slider('Thermal rejection effectiveness (%)', 55, 115, 100, 5)
+    payload = st.slider('Payload electrical demand (relative %)', 50, 155, 100, 5)
+    eclipse = st.toggle('GEO eclipse demonstration', value=False)
     st.divider()
-    a,b=st.columns(2)
-    if a.button("▶ Start / ❚❚ Pause",use_container_width=True):
-        st.session_state.running=not st.session_state.running
-        st.session_state.last_wall=time.monotonic()
-    if b.button("↺ Reset",use_container_width=True):
-        for k,v in DEFAULTS.items():
-            st.session_state[k]=v.copy() if isinstance(v,list) else v
+    b1, b2, b3 = st.columns(3)
+    if b1.button('▶ Start', use_container_width=True):
+        sim['running'] = True
+        sim['last_update'] = time.monotonic()
+    if b2.button('Ⅱ Pause', use_container_width=True):
+        sim['running'] = False
+    if b3.button('↺ Reset', use_container_width=True):
+        st.session_state.sim = {
+            'running': False, 'tick': 0, 'last_update': time.monotonic(),
+            'temp': 35.0, 'soc': 90.0, 'baseline': 15.0,
+            'history': [], 'events': [], 'previous': set()
+        }
         st.rerun()
-    speed = st.select_slider("Simulation speed",options=[1,2,5],value=1,format_func=lambda v:f"{v} simulated min / second")
-    st.markdown("**Presentation suggestions**")
-    st.markdown("1. Start with default settings.\n\n2. Increase heat load to **140 W**.\n\n3. Reduce solar power to **300 W**.\n\n4. Increase rain fade to **8 dB**.")
-    st.caption("The simplified models are educational. Satellite requirements and response times are NOT calibrated to a real spacecraft.")
+    st.caption('A simplified conceptual model, not Es’hailSat engineering specifications. The satellite name is a scenario label only.')
 
-# A small, transparent demonstration model, not satellite flight dynamics.
-def advance_step():
-    s=st.session_state
-    t=s.tick
-    # First-order thermal relaxation with tunable load/cooling; stable at typical slider settings.
-    target=23.0 + 0.22*thermal_load + 15.0*(1.0-cooling/100.0)
-    s.thermal += 0.11*(target-s.thermal)
-    net_power=generation-demand
-    s.soc=float(np.clip(s.soc + net_power/450.0, 0,100))
-    # Construct bus voltage as a bounded, illustrative function of charge and net power.
-    v_target=26.2+0.023*s.soc+0.002*net_power
-    s.voltage += 0.22*(v_target-s.voltage)
-    # Rain fade impacts a downlink margin, not spacecraft onboard telemetry itself.
-    target_link=11.8-rain
-    s.link += 0.23*(target_link-s.link)
-    # Secondary simulated RF-system health index.
-    target_rf=95.0-max(0,42-s.link*3)*0.32
-    s.rf += 0.12*(target_rf-s.rf)
-    s.tick += 1
-    s.history.append({"minute":s.tick,"temperature":s.thermal,"temp_expected":36.0,
-                      "soc":s.soc,"voltage":s.voltage,"margin":s.link,"margin_expected":11.8,
-                      "rf":s.rf})
-    s.history=s.history[-100:]
-    alerts=[]
-    if s.thermal>=45: alerts.append("THERMAL TREND")
-    if s.soc<30: alerts.append("LOW ENERGY RESERVE")
-    if s.link<4: alerts.append("LINK MARGIN DEGRADATION")
-    status=" / ".join(alerts) if alerts else "ALL PARAMETERS WITHIN DEMO LIMITS"
-    if status != s.last_alert:
-        s.events.insert(0,(s.tick,status))
-        s.events=s.events[:20]
-        s.last_alert=status
+# This model intentionally separates ground signal attenuation from spacecraft thermal and power behavior.
+# Assumed baseline reference values are arbitrary but internally consistent for demonstration.
+def compute_sample(s):
+    s['tick'] += 1
+    t = s['tick']
+    # thermal lag: synthetic temperature responds smoothly to load and heat rejection.
+    expected_temp = 35.0 + 0.6 * math.sin(t / 11)
+    temp_target = 35.0 + 0.13 * (heat - 100) - 0.16 * (radiator - 100)
+    s['temp'] += .13 * (temp_target - s['temp'])
+    actual_temp = s['temp'] + 0.15 * math.sin(t / 4)
+    # Only eclipse and power imbalance deplete battery in this simplified GEO scenario.
+    solar_available = 0 if eclipse else 1.0
+    demand_kw = 7.0 * (payload / 100)
+    supply_kw = 9.0 * solar_available
+    battery_delta = (supply_kw - demand_kw) / 25.0 * 100 / 60
+    s['soc'] = min(99.0, max(0.0, s['soc'] + battery_delta))
+    # Synthetic 'power balance' intentionally in kW rather than ungrounded bus voltage.
+    # Rain attenuation is applied to a *ground path*, not spacecraft health.
+    nominal_margin = 13.0 if band.startswith('Ka') else 10.0
+    link_margin = nominal_margin - rain - interference + .15 * math.sin(t / 5)
+    predicted = nominal_margin - rain + .15 * math.sin(t / 5) # weather-informed reference
+    unexplained = link_margin - predicted # interference residual
+    # A fictional received signal quality metric; modeled as margin, not fake RF health score.
+    sample = {
+        'Minute': t, 'Actual thermal °C': round(actual_temp, 3),
+        'Reference thermal °C': round(expected_temp, 3),
+        'GEO battery SOC %': round(s['soc'], 3),
+        'Solar available kW': round(supply_kw, 3),
+        'Payload demand kW': round(demand_kw, 3),
+        'Observed link margin dB': round(link_margin, 3),
+        'Weather-only expected margin dB': round(predicted, 3),
+        'Unexplained RF residual dB': round(unexplained, 3),
+        'Ground rain loss dB': rain,
+        'Interference loss dB': interference,
+    }
+    s['history'].append(sample)
+    s['history'] = s['history'][-180:]
+    flags = []
+    if link_margin < 3: flags.append(('RF LINK', 'Link margin below illustrative 3 dB review threshold', 'warn'))
+    if abs(unexplained) > 1.5: flags.append(('CORRELATION', 'Observed RF loss exceeds weather-only prediction: check interference / ground chain', 'error'))
+    if actual_temp - expected_temp > 5: flags.append(('THERMAL', 'Thermal residual exceeds illustrative 5°C threshold', 'warn'))
+    if eclipse and s['soc'] < 65: flags.append(('ECLIPSE', 'Battery SOC below illustrative 65% review threshold', 'warn'))
+    current = {item[0] for item in flags}
+    for code, message, level in flags:
+        if code not in s['previous']:
+            s['events'].insert(0, (t, code, message, level))
+    for old_code in s['previous'] - current:
+        s['events'].insert(0, (t, 'RECOVERY', f'{old_code} condition cleared', 'event'))
+    if t == 1: s['events'].insert(0, (t, 'START', 'Synthetic GEO communications telemetry initiated', 'event'))
+    s['previous'] = current
+    s['events'] = s['events'][:14]
 
-# Seed with synthetic normal telemetry so charts have useful context before Start.
-if not st.session_state.history:
-    for _ in range(18): advance_step()
+# The fragment makes the content automatically redraw while running; sliders trigger full reruns.
+@st.fragment(run_every='1s')
+def live_console():
+    s = st.session_state.sim
+    if s['running']:
+        compute_sample(s)
+    elif not s['history']:
+        compute_sample(s)
+    row = s['history'][-1]
+    flags = list(s['previous'])
+    status = 'INVESTIGATE' if flags else 'WITHIN ILLUSTRATIVE LIMITS'
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric('SIMULATED MISSION TIME', f"T+{s['tick']:05d} min")
+    c2.metric('LINK MARGIN', f"{row['Observed link margin dB']:.1f} dB")
+    c3.metric('THERMAL DEVIATION', f"{row['Actual thermal °C']-row['Reference thermal °C']:+.1f} °C")
+    c4.metric('ECLIPSE BATTERY SOC', f"{row['GEO battery SOC %']:.1f}%")
+    if flags:
+        st.error(f"HUBOS-SAT ANALYSIS • {status} • {', '.join(flags)}")
+    else:
+        st.success(f"HUBOS-SAT ANALYSIS • {status} • {'RUNNING' if s['running'] else 'PAUSED'}")
+    hist = pd.DataFrame(s['history'])
+    cfg = dict(displayModeBar=False, responsive=True)
+    def make_chart(keys, title, unit, limits=None):
+        fig = go.Figure()
+        colors = ['#59dfce', '#81aefa', '#f6ca78', '#fc8d99']
+        for j, key in enumerate(keys):
+            fig.add_trace(go.Scatter(x=hist['Minute'], y=hist[key], mode='lines', name=key,
+                                     line=dict(color=colors[j % len(colors)], width=2.8)))
+        if limits is not None:
+            fig.add_hline(y=limits, line=dict(color='#f6ca78', dash='dash', width=1),
+                          annotation_text='Illustrative review threshold', annotation_font_color='#f6ca78')
+        fig.update_layout(title=dict(text=title, font=dict(color='#ffffff', size=15)),
+                          paper_bgcolor='#10263b', plot_bgcolor='#10263b',
+                          font=dict(color='#eaf5ff', size=11), height=285,
+                          margin=dict(l=15,r=20,t=45,b=10),
+                          xaxis=dict(title='Simulated elapsed minutes', gridcolor='#2a435b', color='#dceeff'),
+                          yaxis=dict(title=unit, gridcolor='#2a435b', color='#dceeff'),
+                          legend=dict(orientation='h', y=-.38, font=dict(color='#eaf5ff')))
+        return fig
+    graph_left, graph_right = st.columns(2)
+    with graph_left:
+        st.plotly_chart(make_chart(['Observed link margin dB','Weather-only expected margin dB'],
+                                  'Ku/Ka ground-path margin | observed vs weather model', 'dB'),
+                        use_container_width=True, config=cfg)
+        st.plotly_chart(make_chart(['Actual thermal °C','Reference thermal °C'],
+                                  'Spacecraft thermal | modeled vs reference', '°C'),
+                        use_container_width=True, config=cfg)
+    with graph_right:
+        st.plotly_chart(make_chart(['Unexplained RF residual dB'],
+                                  'Cross-source intelligence | unexplained RF loss', 'dB'),
+                        use_container_width=True, config=cfg)
+        st.plotly_chart(make_chart(['GEO battery SOC %'],
+                                  'GEO eclipse demonstration | battery SOC', '%'),
+                        use_container_width=True, config=cfg)
+    st.markdown('### Live analysis: what an additional intelligence layer could contribute')
+    if abs(row['Unexplained RF residual dB']) > 1.5:
+        st.markdown('''<div class="panel"><h3>RF loss not fully explained by weather</h3><p>The model compares a weather-adjusted expectation against the combined observed link impairment. An extra residual is visible. In a real pilot, an operator would validate whether interference, antenna pointing, equipment faults, or measurement uncertainty explain it. <b>This is not a real cause diagnosis.</b></p></div>''', unsafe_allow_html=True)
+    elif row['Observed link margin dB'] < 3:
+        st.markdown('''<div class="panel"><h3>Weather-correlated link degradation</h3><p>Rain attenuation explains most of the modeled reduction. A possible next step is combining measured RF metrics with local weather observations, SLA information and ground-station history to support service-impact analysis.</p></div>''', unsafe_allow_html=True)
+    elif row['Actual thermal °C']-row['Reference thermal °C'] > 5:
+        st.markdown('''<div class="panel"><h3>Thermal residual requires engineering review</h3><p>The actual modeled temperature is above its synthetic expected baseline. An operator could review payload operating mode, heater states, radiation exposure and redundant sensors. HubOS-Sat would present evidence, not issue spacecraft commands.</p></div>''', unsafe_allow_html=True)
+    elif eclipse:
+        st.markdown('''<div class="panel"><h3>GEO eclipse power-balance watch</h3><p>Solar generation is zero in this scenario. Modeled battery state-of-charge declines as the spacecraft supplies payload demand. This is a simplified demonstration of an eclipse period, not an actual Es’hailSat power-system model.</p></div>''', unsafe_allow_html=True)
+    else:
+        st.markdown('''<div class="panel"><h3>Baseline relationship is consistent</h3><p>The weather-adjusted link margin and observed synthetic telemetry align within the model. Test a rain fade event, then add RF interference. The key distinction is that the software distinguishes an expected weather-related change from an additional unexplained loss.</p></div>''', unsafe_allow_html=True)
+    st.markdown('### Mission event console')
+    logs = []
+    for t, code, msg, level in s['events'][:8]:
+        logs.append(f'<div class="line"><span class="{level}">T+{t:05d} [{code}]</span> — {msg}</div>')
+    if not logs: logs.append('<div class="line">No events recorded</div>')
+    st.markdown('<div class="console">'+''.join(logs)+'</div>', unsafe_allow_html=True)
+    st.caption('All data, model values, event timings, thresholds and analytics are synthetic. Live means the demo computes new values while running, not a live satellite feed.')
 
+main, project, next_steps = st.tabs(['01  •  LIVE GEO OPERATIONS', '02  •  SECURE CO-DEVELOPMENT', '03  •  VALIDATION ROADMAP'])
+with main:
+    st.markdown('#### Suggested demonstration: Start → add rain fade → add interference → observe the unexplained RF residual. Then enable GEO eclipse to see battery response.')
+    live_console()
+with project:
+    st.markdown('### Es’hailSat already monitors and controls its spacecraft. What would ReVora add?')
+    a, b, c = st.columns(3)
+    with a:
+        st.markdown('''<div class="panel"><h3>1 · Existing operator systems</h3><p>Es’hailSat operates spacecraft TT&C, capacity management and satellite services. Its teleport provides monitored RF, baseband and transport-stream services. This demonstration does not imply any capability gap.</p></div>''', unsafe_allow_html=True)
+    with b:
+        st.markdown('''<div class="panel"><h3>2 · Proposed read-only bridge</h3><p>Subject to Es’hailSat approval, obtain selected historical telemetry, weather records and link-quality signals through a filtered dataset or isolated interface. No spacecraft commands or production-network access.</p></div>''', unsafe_allow_html=True)
+    with c:
+        st.markdown('''<div class="panel"><h3>3 · HubOS-Sat intelligence</h3><p>Develop cross-source correlation, anomalies against engineering baselines, explainable events and operator investigation evidence. Demonstrate measurable benefit over existing tools before discussing deployment.</p></div>''', unsafe_allow_html=True)
+    st.markdown('**Proposed evaluation use case:** weather-correlated RF degradation versus additional unexplained impairment on an approved Ku/Ka service dataset.')
+    st.info('Not an installed product. This proof of concept uses synthetic data and transparent rules; any ML, digital twin, live interface or predictive accuracy would require engineering and commercial validation.')
+    st.markdown('**Data boundary**  •  Es’hailSat controls access and data rights  •  ReVora develops a test module  •  Human operators remain responsible  •  Background IP and new IP terms require a separate agreement')
+with next_steps:
+    st.markdown('### From interactive concept to a practical engineering pilot')
+    steps = [
+        ('01  Technical alignment', 'Select a real operator pain point and nominate Es’hailSat / ReVora technical counterparts.'),
+        ('02  Data feasibility & security', 'Agree scope of read-only historical RF, weather and/or spacecraft telemetry and the evaluation environment.'),
+        ('03  Limited proof of concept', 'Build a transparent baseline; test anomaly correlation with labeled incidents and known false positives.'),
+        ('04  Measured evaluation', 'Compare with existing workflows using precision, false-alert rate, time to investigation and engineer acceptance.'),
+        ('05  Conditional product discussion', 'If useful, negotiate pilot integration, support model, commercial licensing and Qatar-based IP development.'),
+    ]
+    for heading, desc in steps:
+        st.markdown(f'<div class="panel"><h3>{heading}</h3><p>{desc}</p></div>', unsafe_allow_html=True)
+    st.markdown('**Proposed meeting ask:** “Could we hold a joint technical workshop to assess a read-only, securely scoped data pilot for cross-source link-health analytics?”')
+    st.markdown('#### Public context behind the tailored scenario')
+    st.markdown('- [Es’hailSat satellites: Es’hail-1 and Es’hail-2, Ku/Ka payloads](https://www.eshailsat.qa/satellites/)')
+    st.markdown('- [Es’hailSat teleport services including TT&C and capacity management](https://www.eshailsat.qa/wp-content/uploads/2025/04/Teleport-Services.pdf)')
+    st.markdown('- [Es’hailSat products and services](https://www.eshailsat.qa/products-services/)')
 
-def graph(df,fields,title,units,limit=None):
-    fig=go.Figure()
-    palette=["#56e1d0","#65adff","#ffc47a"]
-    for i,(field,label) in enumerate(fields):
-        fig.add_trace(go.Scatter(x=df.minute,y=df[field],mode="lines",name=label,
-                    line=dict(color=palette[i%len(palette)],width=3 if i==0 else 2,
-                              dash="solid" if i==0 else "dot"),
-                    hovertemplate="Minute %{x}<br>%{y:.2f} "+units+"<extra>"+label+"</extra>"))
-    if limit is not None:
-        fig.add_hline(y=limit,line_dash="dash",line_color="#f6a95e",
-                      annotation_text="Illustrative limit",annotation_font_color="#ffd49c")
-    fig.update_layout(title=dict(text=title,font=dict(color="#f3faff",size=14)),
-        paper_bgcolor="#10243a",plot_bgcolor="#10243a",font=dict(color="#eaf5ff",size=11),height=260,
-        margin=dict(l=35,r=15,t=42,b=22),legend=dict(orientation="h",y=1.12,x=0,font=dict(color="#d9edff")),
-        xaxis=dict(title="Simulated minute",gridcolor="#2b4660",zeroline=False),
-        yaxis=dict(title=units,gridcolor="#2b4660",zeroline=False),
-        hovermode="x unified")
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":False})
-
-@st.fragment(run_every="1s")
-def live_dashboard():
-    s=st.session_state
-    now=time.monotonic()
-    if s.running:
-        # One simulation step per rendered second, with adjustable speed.
-        for _ in range(speed): advance_step()
-    s.last_wall=now
-    thermal_alert=s.thermal>=45
-    energy_alert=s.soc<30
-    link_alert=s.link<4
-    alert_count=sum([thermal_alert,energy_alert,link_alert])
-    state="ATTENTION" if alert_count else "NOMINAL"
-    pill="bad" if alert_count>1 else "warn" if alert_count==1 else "good"
-    st.markdown(f'<span class="pill {pill}">● {state}</span> &nbsp; '
-                f'<span class="pill">MISSION ELAPSED T+{s.tick:05d} MIN</span> &nbsp; '
-                f'<span class="pill">{"LIVE SIMULATION" if s.running else "PAUSED"}</span> &nbsp; '
-                f'<span class="pill">READ-ONLY CONCEPT · HUMAN DECISIONS</span>',unsafe_allow_html=True)
-    st.write("")
-    cols=st.columns(6)
-    entries=[("THERMAL SENSOR",f"{s.thermal:.1f} °C",thermal_alert),
-             ("BUS VOLTAGE",f"{s.voltage:.2f} V",False),
-             ("BATTERY CHARGE",f"{s.soc:.1f}%",energy_alert),
-             ("LINK MARGIN",f"{s.link:.1f} dB",link_alert),
-             ("RF HEALTH INDEX",f"{s.rf:.0f}/100",False),
-             ("ACTIVE RULE ALERTS",str(alert_count),bool(alert_count))]
-    for col,(lab,value,is_bad) in zip(cols,entries):
-        with col:
-            st.markdown(f'<div class="panel"><div class="mini">{lab}</div>'
-                        f'<div class="big">{value}</div>'
-                        f'<span class="pill {"warn" if is_bad else "good"}">'
-                        f'{"REVIEW" if is_bad else "MONITORED"}</span></div>',unsafe_allow_html=True)
-    tab1,tab2,tab3=st.tabs(["MISSION CONSOLE","INTELLIGENCE & DIGITAL TWIN","PARTNERSHIP / INTEGRATION"])
-    import pandas as pd
-    frame=pd.DataFrame(s.history)
-    with tab1:
-        l,r=st.columns([1.65,1])
-        with l:
-            graph(frame,[("temperature","Observed model"),("temp_expected","Expected baseline")],"THERMAL | Actual model vs expected", "°C",45)
-            graph(frame,[("margin","Calculated margin"),("margin_expected","Expected baseline")],"GROUND LINK | Rain fade response", "dB",4)
-        with r:
-            st.markdown("#### Subsystem states")
-            statuses=[("SPACECRAFT THERMAL",thermal_alert),("ELECTRICAL POWER",energy_alert),
-                     ("DOWNLINK / GROUND SEGMENT",link_alert),("OPERATIONAL CONTROL",False)]
-            for lab,bad in statuses:
-                st.markdown(f'<div class="panel"><span class="mini">{lab}</span> &nbsp; '
-                            f'<span class="pill {"warn" if bad else "good"}">'
-                            f'{"INVESTIGATE" if bad else "NOMINAL"}</span></div>',unsafe_allow_html=True)
-            st.markdown("#### Mission event feed")
-            if s.events:
-                for minute,msg in s.events[:6]:
-                    st.markdown(f'<div class="log">T+{minute:05d} | {msg}</div>',unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="log">No rule transitions yet. Change controls while running.</div>',unsafe_allow_html=True)
-        a,b=st.columns(2)
-        with a:graph(frame,[("soc","Battery charge")],"POWER | Stored energy model","%",30)
-        with b:graph(frame,[("voltage","Bus voltage")],"POWER | Bus response","V")
-    with tab2:
-        a,b=st.columns([1,1])
-        with a:
-            st.markdown("### Model-to-telemetry comparison")
-            diff=s.thermal-36.0
-            margin_dev=s.link-11.8
-            st.metric("Thermal deviation from reference",f"{diff:+.1f} °C")
-            st.metric("Ground-link margin deviation",f"{margin_dev:+.1f} dB")
-            st.markdown('<div class="panel"><h4>Digital-twin concept</h4><p>Reference curves are illustrative benchmarks. A future validated twin would use spacecraft-specific engineering models, calibration data and operator-approved telemetry.</p></div>',unsafe_allow_html=True)
-        with b:
-            st.markdown("### Cross-system investigation")
-            if thermal_alert:
-                conclusion="THERMAL: inspect heater states, equipment modes and correlated power trends."
-            elif link_alert:
-                conclusion="LINK: inspect ground weather, antenna pointing and RF equipment metrics."
-            elif energy_alert:
-                conclusion="POWER: review net electrical load, generation and reserve trends."
-            else:
-                conclusion="No demo limits exceeded; continue trend monitoring and compare against reference behaviour."
-            st.markdown(f'<div class="panel"><h4>Rule-based assessment</h4><p>{conclusion}</p><p>Operator action: review evidence; no autonomous spacecraft command is generated.</p></div>',unsafe_allow_html=True)
-            st.markdown('<div class="panel"><h4>Proposed differentiator</h4><p>Combine historical telemetry, spacecraft engineering models and ground-segment conditions to investigate cross-system patterns. Measure any benefit against Es’hailSat’s existing operations tools in a controlled pilot.</p></div>',unsafe_allow_html=True)
-            st.caption("No machine-learning model is trained or validated in this demo; no fault probabilities or confidence percentages are claimed.")
-    with tab3:
-        st.markdown("### Designed to complement existing Es’hailSat operations")
-        c1,c2,c3=st.columns(3)
-        for c,hd,sub in [(c1,"ES’HAILSAT SYSTEMS","Current TT&C, telemetry archives and ground operations"),
-                         (c2,"SECURE DATA INTERFACE","Operator-approved filtered, read-only export into isolated test environment"),
-                         (c3,"REVORA HUBOS-SAT","Proposed cross-system analytics, digital-twin comparison and operator decision support")]:
-            with c:st.markdown(f'<div class="flow"><strong>{hd}</strong><small>{sub}</small></div>',unsafe_allow_html=True)
-        st.markdown("### Credible next steps")
-        st.markdown("**1.** Select an operational problem not adequately addressed by existing tools.  \n**2.** Agree a secure dataset, governance and evaluation criteria.  \\n**3.** Build an isolated proof of concept in Qatar.  \\n**4.** Benchmark accuracy, false alarms, engineering usefulness and security.  \\n**5.** Discuss licensing, local IP and broader cooperation if value is demonstrated.")
-        st.markdown('<div class="panel"><h4>Technical boundary</h4><p>This simulator does not use operational data and is not connected to satellite or ground networks. Any real-data integration must be approved and tested with Es’hailSat engineers and cybersecurity teams.</p></div>',unsafe_allow_html=True)
-
-live_dashboard()
 st.divider()
-st.caption("REVORA / HUBOS-SAT · Concept demonstrator only · All parameters, limits, and telemetry are synthetic. This is not a satellite qualification, a validated digital twin, or evidence of integration with Es’hailSat.")
+st.caption('© ReVora — HubOS-Sat prototype concept. Synthetic data only. Es’hailSat is a prospective technical collaboration partner; no affiliation, endorsement or access is implied.')
